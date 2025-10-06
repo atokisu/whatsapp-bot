@@ -60,20 +60,34 @@ async function startBot() {
         } = await fetchLatestBaileysVersion();
         logger.info(`Using Baileys v${version.join(".")}, Latest: ${isLatest}`);
 
-        sock = makeWASocket({
-            version,
-            auth: {
-                creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, logger),
-            },
-            printQRInTerminal: true,
-            logger: pino({
-                level: 'silent'
-            }),
-            browser: ["Laravel-Bot", "Chrome", "120.0"],
-            generateHighQualityLinkPreview: true,
-            markOnlineOnConnect: true,
-        });
+      sock = makeWASocket({
+    version,
+    auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, logger),
+    },
+    printQRInTerminal: false, // এটাকে false করে দিন
+    logger: pino({
+        level: 'silent'
+    }),
+    browser: ["Laravel-Bot", "Chrome", "120.0"],
+    generateHighQualityLinkPreview: true,
+    markOnlineOnConnect: true,
+});
+
+// পেয়ারিং কোড জেনারেট করার জন্য
+if (!sock.authState.creds.registered) {
+    setTimeout(async () => {
+        const phoneNumber = process.env.YOUR_PHONE_NUMBER; // আপনার হোয়াটসঅ্যাপ নম্বর এনভায়রনমেন্ট ভ্যারিয়েবল থেকে নিন
+        if (phoneNumber) {
+            const code = await sock.requestPairingCode(phoneNumber);
+            logger.info(`Your pairing code: ${code}`);
+            console.log(`Your pairing code: ${code}`);
+        } else {
+            logger.warn("Phone number not provided in environment variables. Skipping pairing code request.");
+        }
+    }, 3000);
+}
 
         // কানেকশন স্ট্যাটাস হ্যান্ডেল করুন
         sock.ev.on("connection.update", (update) => {
