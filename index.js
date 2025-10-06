@@ -2,6 +2,7 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers
 const pino = require('pino');
 const express = require('express');
 const { Boom } = require('@hapi/boom');
+const crypto = require('crypto'); // ✅ FIX: Add this line at the top
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -100,3 +101,4 @@ connectToWhatsApp().then(() => {
         console.log(`WhatsApp bot server is listening on port ${port}`);
     });
 });
+
