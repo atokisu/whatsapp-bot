@@ -1,0 +1,14 @@
+# Node.js dependencies
+node_modules/
+
+# Baileys authentication files
+baileys_auth_info/
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Lock files
+package-lock.json
+yarn.lock
