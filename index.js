@@ -6,6 +6,7 @@ const {
     makeCacheableSignalKeyStore
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
+const qrcode = require('qrcode-terminal');
 const express = require('express');
 const http = require('http');
 
@@ -83,10 +84,9 @@ async function startBot() {
                 qr
             } = update || {};
 
-            if (qr) {
-                logger.info("QR code generated. Please scan.");
-                // আপনি চাইলে QR কোড একটি ফাইলে সেভ করতে পারেন বা অন্য কোথাও দেখাতে পারেন
-            }
+              if (qr) {
+             qrcode.generate(qr, { small: true });
+                }
 
             if (connection === "close") {
                 const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== 401; // 401 হলে QR আবার স্ক্যান করতে হবে
