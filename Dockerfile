@@ -4,7 +4,7 @@ FROM node:20-slim
 # Set the working directory in the container
 WORKDIR /usr/src/app
 
-# Install necessary system dependencies for Baileys (for Chromium)
+# Install necessary system dependencies for Baileys, including git
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gconf-service \
     libasound2 \
@@ -40,6 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release \
     xdg-utils \
     wget \
+    git \
  && rm -rf /var/lib/apt/lists/*
 
 # Copy package.json and package-lock.json to the working directory
