@@ -4,6 +4,9 @@ FROM node:18-slim
 # Set the working directory in the container
 WORKDIR /usr/src/app
 
+# ✅ FIX: Install git first
+RUN apt-get update && apt-get install -y git
+
 # Install necessary dependencies for Baileys
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gconf-service \
@@ -60,3 +63,4 @@ EXPOSE 3000
 
 # Define the command to run the application
 CMD [ "node", "index.js" ]
+
