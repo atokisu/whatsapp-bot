@@ -2,11 +2,11 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers
 const pino = require('pino');
 const express = require('express');
 const { Boom } = require('@hapi/boom');
-const crypto = require('crypto'); // ✅ FIX: Add this line at the top
+const crypto = require('crypto'); // ✅ FIX: This line is added
 
 const app = express();
 const port = process.env.PORT || 3000;
-const API_SECRET_KEY = process.env.API_SECRET_KEY || "YourSecretKey"; // Set your secret key in Railway env
+const API_SECRET_KEY = process.env.API_SECRET_KEY || "YourSecretKey"; 
 
 app.use(express.json());
 
@@ -18,7 +18,7 @@ async function connectToWhatsApp() {
     
     sock = makeWASocket({
         logger: pino({ level: 'silent' }),
-        printQRInTerminal: false, // We will handle QR code manually
+        printQRInTerminal: false,
         auth: state,
         browser: Browsers.macOS('Desktop'),
     });
@@ -36,7 +36,7 @@ async function connectToWhatsApp() {
                 connectToWhatsApp();
             }
         } else if (connection === 'open') {
-            qrCode = null; // Clear QR code once connected
+            qrCode = null;
             console.log('WhatsApp connection opened');
         }
     });
@@ -44,7 +44,6 @@ async function connectToWhatsApp() {
     sock.ev.on('creds.update', saveCreds);
 }
 
-// Middleware to check for secret key
 const authMiddleware = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     if (!authHeader || authHeader !== `Bearer ${API_SECRET_KEY}`) {
@@ -75,18 +74,15 @@ app.post('/send-message', authMiddleware, async (req, res) => {
     }
 
     try {
-        // Format number for WhatsApp
         const formattedNumber = number.startsWith('88') ? number : `88${number}`;
         const whatsappId = `${formattedNumber}@s.whatsapp.net`;
 
-        // Check if the number has a WhatsApp account
         const [result] = await sock.onWhatsApp(whatsappId);
 
         if (result && result.exists) {
             await sock.sendMessage(whatsappId, { text: message });
             res.status(200).json({ success: true, message: 'Message sent successfully.' });
         } else {
-            // User does not have WhatsApp, but we don't throw an error as requested
             res.status(200).json({ success: false, message: 'User does not have WhatsApp.' });
         }
     } catch (error) {
@@ -101,4 +97,3 @@ connectToWhatsApp().then(() => {
         console.log(`WhatsApp bot server is listening on port ${port}`);
     });
 });
-
