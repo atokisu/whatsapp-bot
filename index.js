@@ -1,88 +1,190 @@
-import express from 'express';
-import qrcode from 'qrcode';
-import pino from 'pino';
-import makeWASocket, {
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-  DisconnectReason
-} from '@whiskeysockets/baileys';
+const {
+    default: makeWASocket,
+    useMultiFileAuthState,
+    fetchLatestBaileysVersion,
+    isJidBroadcast,
+    makeCacheableSignalKeyStore
+} = require("@whiskeysockets/baileys");
+const pino = require("pino");
+const express = require('express');
+const http = require('http');
 
-const LOG = pino({ level: 'info' });
-
-const PORT = process.env.PORT || 3000;
-const AUTH_DIR = process.env.SESSION_DIR || './session';
-const API_TOKEN = process.env.API_TOKEN || 'changeme';
-const ADMIN_NUMBER = process.env.ADMIN_NUMBER || '';
-
-let sock = null;
-let lastQrDataUrl = null;
-
-function formatToJid(number) {
-  const digits = number.replace(/\D/g, '');
-  return `${digits}@s.whatsapp.net`;
-}
-
-async function startSock() {
-  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-  const { version } = await fetchLatestBaileysVersion();
-
-  sock = makeWASocket({
-    logger: LOG,
-    printQRInTerminal: false,
-    auth: state,
-    version
-  });
-
-  sock.ev.on('creds.update', saveCreds);
-
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update;
-    if (qr) {
-      lastQrDataUrl = await qrcode.toDataURL(qr);
-      LOG.info('✅ QR ready — visit /qr to scan');
-    }
-    if (connection === 'open') {
-      LOG.info('✅ WhatsApp Connected');
-      lastQrDataUrl = null;
-    }
-    if (connection === 'close') {
-      const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
-      if (shouldReconnect) startSock();
-    }
-  });
-}
-
-await startSock();
-
+// Express অ্যাপ শুরু করুন
 const app = express();
+const server = http.createServer(app);
+const PORT = process.env.PORT || 3000;
+const API_SECRET_KEY = process.env.API_SECRET_KEY || "your-secret-key"; // একটি শক্তিশালী কী ব্যবহার করুন
+
+// JSON বডি পার্স করার জন্য মিডলওয়্যার
 app.use(express.json());
 
-app.get('/qr', (req, res) => {
-  if (!lastQrDataUrl) return res.send('No QR available or already connected');
-  res.send(`<img src="${lastQrDataUrl}" />`);
+// Logger সেটআপ
+const logger = pino({
+    level: "info",
+    transport: {
+        target: "pino-pretty"
+    }
 });
 
-app.post('/api/send', async (req, res) => {
-  const auth = req.headers.authorization || '';
-  if (auth !== `Bearer ${API_TOKEN}`) return res.status(401).json({ error: 'unauthorized' });
+let sock; // sock ভ্যারিয়েবলটি গ্লোবালি ডিক্লেয়ার করুন
 
-  const { number, message } = req.body;
-  if (!number || !message) return res.status(400).json({ error: 'number and message required' });
+/**
+ * নম্বর ফরম্যাট করার ফাংশন
+ * @param {string} number
+ * @returns {string}
+ */
+const formatPhoneNumber = (number) => {
+    let formatted = number.replace(/\D/g, ''); // শুধু সংখ্যা রাখুন
+    if (formatted.startsWith('880') && formatted.length === 13) {
+        return `${formatted}@s.whatsapp.net`;
+    }
+    if (formatted.startsWith('0') && formatted.length === 11) {
+        return `88${formatted}@s.whatsapp.net`;
+    }
+    return `${formatted}@s.whatsapp.net`; // ডিফল্ট ফরম্যাট
+};
 
-  const jid = formatToJid(number);
-  const [check] = await sock.onWhatsApp(jid);
-  if (!check?.exists) {
-    return res.json({ sent: false, reason: 'not_on_whatsapp' });
-  }
 
-  await sock.sendMessage(jid, { text: message });
+/**
+ * WhatsApp বট শুরু করার ফাংশন
+ */
+async function startBot() {
+    try {
+        const {
+            state,
+            saveCreds
+        } = await useMultiFileAuthState("auth_info");
+        const {
+            version,
+            isLatest
+        } = await fetchLatestBaileysVersion();
+        logger.info(`Using Baileys v${version.join(".")}, Latest: ${isLatest}`);
 
-  if (ADMIN_NUMBER) {
-    const adminJid = formatToJid(ADMIN_NUMBER);
-    await sock.sendMessage(adminJid, { text: `✅ Message sent to ${number}` });
-  }
+        sock = makeWASocket({
+            version,
+            auth: {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, logger),
+            },
+            printQRInTerminal: true,
+            logger: pino({
+                level: 'silent'
+            }),
+            browser: ["Laravel-Bot", "Chrome", "120.0"],
+            generateHighQualityLinkPreview: true,
+            markOnlineOnConnect: true,
+        });
 
-  res.json({ sent: true });
+        // কানেকশন স্ট্যাটাস হ্যান্ডেল করুন
+        sock.ev.on("connection.update", (update) => {
+            const {
+                connection,
+                lastDisconnect,
+                qr
+            } = update || {};
+
+            if (qr) {
+                logger.info("QR code generated. Please scan.");
+                // আপনি চাইলে QR কোড একটি ফাইলে সেভ করতে পারেন বা অন্য কোথাও দেখাতে পারেন
+            }
+
+            if (connection === "close") {
+                const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== 401; // 401 হলে QR আবার স্ক্যান করতে হবে
+                logger.error(`Connection closed. Reconnecting: ${shouldReconnect}`);
+                if (shouldReconnect) {
+                    startBot();
+                }
+            } else if (connection === "open") {
+                logger.info("✅ WhatsApp bot connected successfully!");
+            }
+        });
+
+        // ক্রেডেনশিয়াল সেভ করুন
+        sock.ev.on("creds.update", saveCreds);
+
+    } catch (error) {
+        logger.error("❌ Failed to start bot:", error);
+    }
+}
+
+
+// API Security Middleware
+const checkApiKey = (req, res, next) => {
+    const apiKey = req.headers['x-api-key'];
+    if (apiKey && apiKey === API_SECRET_KEY) {
+        next();
+    } else {
+        res.status(401).json({
+            status: 'error',
+            message: 'Unauthorized: Invalid API Key'
+        });
+    }
+};
+
+
+// API Endpoints
+app.get('/', (req, res) => {
+    res.status(200).json({
+        status: 'ok',
+        message: 'WhatsApp API server is running.'
+    });
 });
 
-app.listen(PORT, () => LOG.info(`🚀 Server running on port ${PORT}`));
+app.post('/send-message', checkApiKey, async (req, res) => {
+    const {
+        number,
+        message
+    } = req.body;
+
+    if (!number || !message) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Number and message are required.'
+        });
+    }
+
+    if (!sock || sock.ws.readyState !== 1) {
+         return res.status(503).json({
+            status: 'error',
+            message: 'Bot is not connected. Please wait or check logs.'
+        });
+    }
+
+    const formattedNumber = formatPhoneNumber(number);
+
+    try {
+        // এই নম্বরে হোয়াটসঅ্যাপ আছে কিনা চেক করুন
+        const [result] = await sock.onWhatsApp(formattedNumber);
+
+        if (result && result.exists) {
+            await sock.sendMessage(formattedNumber, {
+                text: message
+            });
+            logger.info(`Message sent to ${formattedNumber}`);
+            res.status(200).json({
+                status: 'success',
+                message: `Message sent to ${number}`
+            });
+        } else {
+            // হোয়াটসঅ্যাপ না থাকলে কোনো মেসেজ না পাঠিয়ে শুধু লগ করুন
+            logger.warn(`Number ${number} does not have WhatsApp. Skipping.`);
+            res.status(202).json({
+                status: 'skipped',
+                message: `Number ${number} does not have an active WhatsApp account.`
+            });
+        }
+    } catch (error) {
+        logger.error(`Failed to send message to ${number}:`, error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to send message.'
+        });
+    }
+});
+
+
+// সার্ভার চালু করুন
+server.listen(PORT, () => {
+    logger.info(`Server is listening on port ${PORT}`);
+    startBot(); // বট কানেকশন শুরু করুন
+});
