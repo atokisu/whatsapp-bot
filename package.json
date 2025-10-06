@@ -1,20 +1,14 @@
 {
-  "name": "laravel-whatsapp-bot",
+  "name": "whatsapp-bot",
   "version": "1.0.0",
-  "description": "WhatsApp bot for Laravel integration using Baileys",
-  "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
-  "author": "Gemini",
-  "license": "ISC",
-  "engines": {
-    "node": ">=18.0.0"
-  },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.5.0",
+    "@whiskeysockets/baileys": "^7.0.0-rc.2",
     "express": "^4.18.2",
-    "qrcode-terminal": "^0.12.0",
-    "pino": "^8.16.2"
+    "qrcode": "^1.5.1",
+    "pino": "^8.8.0"
   }
 }
